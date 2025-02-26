@@ -1,5 +1,5 @@
 name: flutter_mini_app_bridge
-description: "A new Flutter package project."
+description: "A Bridge to communicate between Flutter and Web Based Mini App"
 version: 1.0.0
 repository: "https://github.com/karseng9898/flutter_mini_app_bridge"
 
