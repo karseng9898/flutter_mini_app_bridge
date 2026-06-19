@@ -63,16 +63,20 @@ void main() {
         expect(controller.isMethodRegistered('TestClass', 'testMethod'), true);
       });
 
-      test('getRegisteredMethods returns empty list for non-existent class', () {
+      test('getRegisteredMethods returns empty list for non-existent class',
+          () {
         expect(controller.getRegisteredMethods('NonExistentClass'), []);
       });
     });
 
     group('Method Unregistration', () {
       setUp(() {
-        controller.registerMethod('TestClass', 'method1', (params) async => BridgeResponse.success());
-        controller.registerMethod('TestClass', 'method2', (params) async => BridgeResponse.success());
-        controller.registerMethod('OtherClass', 'method1', (params) async => BridgeResponse.success());
+        controller.registerMethod(
+            'TestClass', 'method1', (params) async => BridgeResponse.success());
+        controller.registerMethod(
+            'TestClass', 'method2', (params) async => BridgeResponse.success());
+        controller.registerMethod('OtherClass', 'method1',
+            (params) async => BridgeResponse.success());
       });
 
       test('should unregister a specific method', () {
@@ -82,8 +86,10 @@ void main() {
       });
 
       test('should return false when unregistering non-existent method', () {
-        expect(controller.unregisterMethod('TestClass', 'nonExistentMethod'), false);
-        expect(controller.unregisterMethod('NonExistentClass', 'method1'), false);
+        expect(controller.unregisterMethod('TestClass', 'nonExistentMethod'),
+            false);
+        expect(
+            controller.unregisterMethod('NonExistentClass', 'method1'), false);
       });
 
       test('should unregister all methods for a class', () {
@@ -109,14 +115,27 @@ void main() {
           (params) async => BridgeResponse.success({'result': params['input']}),
         );
 
-        controller.registerMethod('TestClass', 'errorMethod', (params) async => BridgeResponse.error('Error occurred'));
+        controller.registerMethod('TestClass', 'errorMethod',
+            (params) async => BridgeResponse.error('Error occurred'));
 
         controller.registerMethod('TestClass', 'timeoutMethod', (params) async {
           await Future.delayed(const Duration(milliseconds: 200));
           return BridgeResponse.success();
         });
 
-        controller.registerMethod('TestClass', 'exceptionMethod', (params) async => throw Exception('Test exception'));
+        controller.registerMethod('TestClass', 'exceptionMethod',
+            (params) async => throw Exception('Test exception'));
+
+        controller.registerRequestHandler(
+          'TestClass',
+          'metadataMethod',
+          (request) async => BridgeResponse.success({
+            'miniAppId': request.miniAppId,
+            'authorization': request.authorization,
+            'input': request.params['input'],
+            'meta': request.meta,
+          }),
+        );
       });
 
       test('should process valid request successfully', () async {
@@ -135,8 +154,44 @@ void main() {
         expect(result['data']['result'], 'test-value');
       });
 
+      test('should pass metadata to request handlers and redact sensitive logs',
+          () async {
+        String request = jsonEncode({
+          'id': '123',
+          'className': 'TestClass',
+          'method': 'metadataMethod',
+          'params': {'input': 'test-value', 'accessToken': 'param-secret'},
+          'meta': {
+            'miniAppId': 'wallet',
+            'authorization': 'Bearer secret-token',
+            'nested': {'refreshToken': 'refresh-secret'},
+          },
+        });
+
+        String response = await controller.processRequest(request);
+        Map<String, dynamic> result = jsonDecode(response);
+        final joinedLogs = logs.join('\n');
+
+        expect(result['id'], '123');
+        expect(result['success'], true);
+        expect(result['data']['miniAppId'], 'wallet');
+        expect(result['data']['authorization'], 'Bearer secret-token');
+        expect(result['data']['input'], 'test-value');
+        expect(
+            result['data']['meta']['nested']['refreshToken'], 'refresh-secret');
+        expect(joinedLogs, contains('[REDACTED]'));
+        expect(joinedLogs, isNot(contains('secret-token')));
+        expect(joinedLogs, isNot(contains('param-secret')));
+        expect(joinedLogs, isNot(contains('refresh-secret')));
+      });
+
       test('should handle error responses', () async {
-        String request = jsonEncode({'id': '123', 'className': 'TestClass', 'method': 'errorMethod', 'params': {}});
+        String request = jsonEncode({
+          'id': '123',
+          'className': 'TestClass',
+          'method': 'errorMethod',
+          'params': {}
+        });
 
         String response = await controller.processRequest(request);
         Map<String, dynamic> result = jsonDecode(response);
@@ -146,7 +201,12 @@ void main() {
       });
 
       test('should handle method timeout', () async {
-        String request = jsonEncode({'id': '123', 'className': 'TestClass', 'method': 'timeoutMethod', 'params': {}});
+        String request = jsonEncode({
+          'id': '123',
+          'className': 'TestClass',
+          'method': 'timeoutMethod',
+          'params': {}
+        });
 
         String response = await controller.processRequest(request);
         Map<String, dynamic> result = jsonDecode(response);
@@ -156,7 +216,12 @@ void main() {
       });
 
       test('should handle method exception', () async {
-        String request = jsonEncode({'id': '123', 'className': 'TestClass', 'method': 'exceptionMethod', 'params': {}});
+        String request = jsonEncode({
+          'id': '123',
+          'className': 'TestClass',
+          'method': 'exceptionMethod',
+          'params': {}
+        });
 
         String response = await controller.processRequest(request);
         Map<String, dynamic> result = jsonDecode(response);
@@ -166,7 +231,12 @@ void main() {
       });
 
       test('should handle unknown method', () async {
-        String request = jsonEncode({'id': '123', 'className': 'TestClass', 'method': 'unknownMethod', 'params': {}});
+        String request = jsonEncode({
+          'id': '123',
+          'className': 'TestClass',
+          'method': 'unknownMethod',
+          'params': {}
+        });
 
         String response = await controller.processRequest(request);
         Map<String, dynamic> result = jsonDecode(response);
@@ -194,6 +264,25 @@ void main() {
 
         expect(result['success'], false);
         expect(result['error'], contains('Invalid request format'));
+      });
+
+      test('should reject non-object metadata without logging sensitive value',
+          () async {
+        String request = jsonEncode({
+          'id': '123',
+          'className': 'TestClass',
+          'method': 'metadataMethod',
+          'params': {},
+          'meta': 'Bearer invalid-secret',
+        });
+
+        String response = await controller.processRequest(request);
+        Map<String, dynamic> result = jsonDecode(response);
+
+        expect(result['id'], '123');
+        expect(result['success'], false);
+        expect(result['error'], contains('Invalid request format'));
+        expect(logs.join('\n'), isNot(contains('invalid-secret')));
       });
     });
 
@@ -232,7 +321,8 @@ void main() {
     });
 
     test('should create event payload', () {
-      String payload = controller.createEventPayload('testEvent', {'data': 'testData'});
+      String payload =
+          controller.createEventPayload('testEvent', {'data': 'testData'});
       Map<String, dynamic> result = jsonDecode(payload);
 
       expect(result['event'], 'testEvent');

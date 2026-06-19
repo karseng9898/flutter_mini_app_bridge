@@ -49,6 +49,21 @@ flutter pub get
    });
    ```
 
+   Use `registerRequestHandler` when the method needs metadata such as
+   `miniAppId` or `authorization`:
+
+   ```dart
+   bridgeController.registerRequestHandler('account', 'getProfile', (request) async {
+     final miniAppId = request.miniAppId;
+     final authorization = request.authorization;
+
+     return BridgeResponse.success({
+       'miniAppId': miniAppId,
+       'hasAuthorization': authorization != null,
+     });
+   });
+   ```
+
 4. **Process Incoming Requests:**
 
    ```dart
@@ -67,6 +82,11 @@ flutter pub get
 2. **Using the Bridge in Your Mini-App:**
 
    ```javascript
+   superapp.setDefaultMeta({
+     miniAppId: "wallet",
+     authorization: "Bearer access-token"
+   });
+
    superapp
      .call("exampleClass", "exampleMethod", { someParam: "value" })
      .then((response) => {
@@ -77,12 +97,26 @@ flutter pub get
      });
    ```
 
+   You can also pass metadata for one call:
+
+   ```javascript
+   await superapp.call("account", "getProfile", {}, {
+     meta: {
+       miniAppId: "loyalty",
+       authorization: "Bearer loyalty-token"
+     }
+   });
+   ```
+
 ## API Reference
 
 ### Flutter Bridge Controller
 
 - **registerMethod(className, methodName, handler, {override})**
-  Registers a bridge method.
+  Registers a params-only bridge method.
+- **registerRequestHandler(className, methodName, handler, {override})**
+  Registers a metadata-aware bridge method. The handler receives a `BridgeRequest`
+  with `params`, `meta`, `miniAppId`, and `authorization`.
 - **unregisterMethod(className, methodName)**
   Unregisters a specific bridge method.
 - **processRequest(message)**
@@ -95,7 +129,14 @@ flutter pub get
 ### JavaScript Bridge
 
 - **window.superapp.call(className, methodName, params?)**
-  Calls a native Flutter method.
+  Calls a native Flutter method. Pass `{ meta: {...} }` as the fourth argument
+  for per-call metadata.
+- **window.superapp.setDefaultMeta(meta?)**
+  Sets metadata sent with every bridge request.
+- **window.superapp.getDefaultMeta()**
+  Returns configured default metadata.
+- **window.superapp.clearDefaultMeta()**
+  Clears configured default metadata.
 - **window.superapp.addListener(eventName, callback)**
   Adds an event listener.
 - **window.superapp.removeListener(eventName, callback)**
@@ -104,6 +145,10 @@ flutter pub get
   Retrieves stored parameters.
 - **window.superapp.receiveMessage(response)**
   Processes incoming messages.
+
+Sensitive values in fields such as `authorization`, `token`, `accessToken`,
+`refreshToken`, `password`, `secret`, `cookie`, and `apiKey` are redacted from
+bridge logs.
 
 ## Contributing
 
