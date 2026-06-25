@@ -131,7 +131,6 @@ void main() {
           'metadataMethod',
           (request) async => BridgeResponse.success({
             'miniAppId': request.miniAppId,
-            'authorization': request.authorization,
             'input': request.params['input'],
             'meta': request.meta,
           }),
@@ -163,7 +162,7 @@ void main() {
           'params': {'input': 'test-value', 'accessToken': 'param-secret'},
           'meta': {
             'miniAppId': 'wallet',
-            'authorization': 'Bearer secret-token',
+            'locale': 'en-MY',
             'nested': {'refreshToken': 'refresh-secret'},
           },
         });
@@ -175,12 +174,11 @@ void main() {
         expect(result['id'], '123');
         expect(result['success'], true);
         expect(result['data']['miniAppId'], 'wallet');
-        expect(result['data']['authorization'], 'Bearer secret-token');
         expect(result['data']['input'], 'test-value');
+        expect(result['data']['meta']['locale'], 'en-MY');
         expect(
             result['data']['meta']['nested']['refreshToken'], 'refresh-secret');
         expect(joinedLogs, contains('[REDACTED]'));
-        expect(joinedLogs, isNot(contains('secret-token')));
         expect(joinedLogs, isNot(contains('param-secret')));
         expect(joinedLogs, isNot(contains('refresh-secret')));
       });

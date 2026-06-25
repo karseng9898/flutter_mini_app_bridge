@@ -1,19 +1,21 @@
 # flutter_mini_app_bridge
 
-A Flutter package that provides a robust bridge between your Flutter SuperApp and web-based mini-apps. This package offers an easy way to register and invoke bridge methods on the Flutter side while seamlessly integrating with a JavaScript bridge.
+A Flutter package for communication between a Flutter SuperApp and web-based Mini Apps.
 
 ## Features
 
-- **Bridge Method Registration:** Register, invoke, and manage bridge methods with ease.
-- **Event Management:** Listen for and dispatch events between Flutter and your mini-app.
+- Register and manage bridge methods.
+- Access optional request metadata, including `miniAppId`.
+- Create event payloads for Mini Apps.
+- Apply execution timeouts and redact sensitive values from bridge logs.
 
 ## Installation
 
-Add `flutter_mini_app_bridge` to your `pubspec.yaml`:
+Add the package to `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_mini_app_bridge: ^1.0.0
+  flutter_mini_app_bridge: ^1.0.2
 ```
 
 Then run:
@@ -22,137 +24,126 @@ Then run:
 flutter pub get
 ```
 
-## Usage
+## Flutter usage
 
-### Flutter Side
+Create a controller and register a params-only method:
 
-1. **Import the Package:**
+```dart
+import 'package:flutter_mini_app_bridge/flutter_mini_app_bridge.dart';
 
-   ```dart
-   import 'package:flutter_mini_app_bridge/flutter_mini_app_bridge.dart';
-   ```
+final bridgeController = MiniAppBridgeController(
+  logger: (message) => print(message),
+  methodTimeout: const Duration(seconds: 30),
+);
 
-2. **Create an Instance of the Bridge Controller:**
+bridgeController.registerMethod(
+  'exampleClass',
+  'exampleMethod',
+  (params) async {
+    return BridgeResponse.success({
+      'result': 'Hello from Flutter!',
+    });
+  },
+);
+```
 
-   ```dart
-   final bridgeController = MiniAppBridgeController(
-     logger: (msg) => print(msg),
-     methodTimeout: Duration(seconds: 30),
-   );
-   ```
+Use `registerRequestHandler` when a method needs request metadata:
 
-3. **Register a Bridge Method:**
+```dart
+bridgeController.registerRequestHandler(
+  'account',
+  'getProfile',
+  (request) async {
+    return BridgeResponse.success({
+      'miniAppId': request.miniAppId,
+      'locale': request.meta['locale'],
+    });
+  },
+);
+```
 
-   ```dart
-   bridgeController.registerMethod('exampleClass', 'exampleMethod', (params) async {
-     return BridgeResponse.success({'result': 'Hello from Flutter!'});
-   });
-   ```
+Process an incoming request and send the returned JSON string back to the Mini App:
 
-   Use `registerRequestHandler` when the method needs metadata such as
-   `miniAppId` or `authorization`:
+```dart
+final response = await bridgeController.processRequest(messageFromMiniApp);
+```
 
-   ```dart
-   bridgeController.registerRequestHandler('account', 'getProfile', (request) async {
-     final miniAppId = request.miniAppId;
-     final authorization = request.authorization;
+## JavaScript usage
 
-     return BridgeResponse.success({
-       'miniAppId': miniAppId,
-       'hasAuthorization': authorization != null,
-     });
-   });
-   ```
+Load the matching JavaScript bridge:
 
-4. **Process Incoming Requests:**
+```html
+<script src="https://unpkg.com/js-mini-app-bridge-plus@1.0.2/mini-app-bridge.min.js"></script>
+```
 
-   ```dart
-   String response = await bridgeController.processRequest(messageFromMiniApp);
-   // Send the response back to the mini-app
-   ```
+Metadata is optional. Configure a default `miniAppId` when all calls belong to the same Mini App:
 
-### JavaScript Side
+```js
+window.superapp.setDefaultMeta({
+  miniAppId: "wallet"
+});
 
-1. **Include the Script in Your HTML:**
+const response = await window.superapp.call(
+  "exampleClass",
+  "exampleMethod",
+  { someParam: "value" }
+);
+```
 
-   ```html
-   <script src="https://unpkg.com/js-mini-app-bridge-plus@1.0.0/mini-app-bridge.min.js"></script>
-   ```
+Metadata may also be provided for one call and can contain custom keys:
 
-2. **Using the Bridge in Your Mini-App:**
+```js
+await window.superapp.call(
+  "account",
+  "getProfile",
+  {},
+  {
+    meta: {
+      miniAppId: "loyalty",
+      locale: "en-MY"
+    }
+  }
+);
+```
 
-   ```javascript
-   superapp.setDefaultMeta({
-     miniAppId: "wallet",
-     authorization: "Bearer access-token"
-   });
+The request payload uses this shape:
 
-   superapp
-     .call("exampleClass", "exampleMethod", { someParam: "value" })
-     .then((response) => {
-       console.log("Response from Flutter:", response);
-     })
-     .catch((error) => {
-       console.error("Error calling Flutter method:", error);
-     });
-   ```
+```json
+{
+  "id": "sa_...",
+  "className": "account",
+  "method": "getProfile",
+  "params": {},
+  "meta": {
+    "miniAppId": "loyalty",
+    "locale": "en-MY"
+  }
+}
+```
 
-   You can also pass metadata for one call:
+## API reference
 
-   ```javascript
-   await superapp.call("account", "getProfile", {}, {
-     meta: {
-       miniAppId: "loyalty",
-       authorization: "Bearer loyalty-token"
-     }
-   });
-   ```
+### Flutter
 
-## API Reference
+- `registerMethod(className, methodName, handler, {override})`: registers a params-only method.
+- `registerRequestHandler(className, methodName, handler, {override})`: registers a handler that receives a `BridgeRequest` with `params`, `meta`, and `miniAppId`.
+- `unregisterMethod(className, methodName)`: unregisters a method.
+- `processRequest(message)`: processes an incoming JSON request.
+- `createEventPayload(eventName, data)`: creates a JSON event payload.
+- `unregisterAllMethods()`: clears all registered methods.
 
-### Flutter Bridge Controller
+### JavaScript
 
-- **registerMethod(className, methodName, handler, {override})**
-  Registers a params-only bridge method.
-- **registerRequestHandler(className, methodName, handler, {override})**
-  Registers a metadata-aware bridge method. The handler receives a `BridgeRequest`
-  with `params`, `meta`, `miniAppId`, and `authorization`.
-- **unregisterMethod(className, methodName)**
-  Unregisters a specific bridge method.
-- **processRequest(message)**
-  Processes an incoming mini-app request.
-- **createEventPayload(eventName, data)**
-  Creates a JSON payload for events.
-- **unregisterAllMethods()**
-  Clears all registered methods.
+- `window.superapp.call(className, methodName, params?, options?)`
+- `window.superapp.setDefaultMeta(meta?)`
+- `window.superapp.getDefaultMeta()`
+- `window.superapp.clearDefaultMeta()`
+- `window.superapp.addListener(eventName, callback)`
+- `window.superapp.removeListener(eventName, callback)`
+- `window.superapp.getParams(key?)`
+- `window.superapp.receiveMessage(response)`
 
-### JavaScript Bridge
-
-- **window.superapp.call(className, methodName, params?)**
-  Calls a native Flutter method. Pass `{ meta: {...} }` as the fourth argument
-  for per-call metadata.
-- **window.superapp.setDefaultMeta(meta?)**
-  Sets metadata sent with every bridge request.
-- **window.superapp.getDefaultMeta()**
-  Returns configured default metadata.
-- **window.superapp.clearDefaultMeta()**
-  Clears configured default metadata.
-- **window.superapp.addListener(eventName, callback)**
-  Adds an event listener.
-- **window.superapp.removeListener(eventName, callback)**
-  Removes an event listener.
-- **window.superapp.getParams(key?)**
-  Retrieves stored parameters.
-- **window.superapp.receiveMessage(response)**
-  Processes incoming messages.
-
-Sensitive values in fields such as `authorization`, `token`, `accessToken`,
-`refreshToken`, `password`, `secret`, `cookie`, and `apiKey` are redacted from
-bridge logs.
-
-## Contributing
-
-Contributions are welcome! Feel free to open issues or submit pull requests on [GitHub](https://github.com/karseng9898/flutter_mini_app_bridge).
+Credential-like values are redacted from bridge logs.
 
 ## License
 

@@ -97,12 +97,6 @@ class BridgeRequest {
     return value is String ? value : null;
   }
 
-  /// Authorization value from [meta], when provided.
-  String? get authorization {
-    final value = meta['authorization'];
-    return value is String ? value : null;
-  }
-
   /// Converts the request to a JSON map.
   Map<String, dynamic> toJson() {
     return {
@@ -160,7 +154,7 @@ class MiniAppBridgeController {
   /// Registers a metadata-aware method handler for a specific class and method name.
   ///
   /// Use this when the handler needs access to [BridgeRequest.meta], such as
-  /// mini-app identity or authorization metadata.
+  /// mini-app identity or other request metadata.
   void registerRequestHandler(
       String className, String methodName, BridgeRequestHandler handler,
       {bool override = true}) {
